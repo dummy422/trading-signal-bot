@@ -1,182 +1,136 @@
-
-// TRADING BOT v2 - FIXED DEPENDENCIESconst TelegramBot = require('node-telegram-bot-api');
-const axios = require('axios');
-const cron = require('node-cron');
+// SIMPLE TRADING BOT - WORKING VERSION
 const express = require('express');
+const axios = require('axios');
 
-// Initialize
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Telegram Bot Configuration
+// Telegram configuration
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
-if (!BOT_TOKEN || !CHAT_ID) {
-    console.error('❌ Missing BOT_TOKEN or CHAT_ID environment variables');
-    process.exit(1);
-}
-
-const bot = new TelegramBot(BOT_TOKEN, { polling: false });
-
-// Trading pairs to monitor
+// Trading pairs
 const TRADING_PAIRS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'AVAXUSDT', 'MATICUSDT'];
 
 class TradingSignalBot {
     constructor() {
         this.minConfidence = 75;
-        console.log('🤖 Trading Signal Bot Started - 24/7 Operation');
     }
 
     async initialize() {
-        // Send startup message
-        await this.sendTelegramMessage('🚀 *Trading Signal Bot Started!*\n\nI will monitor markets 24/7 and send high-probability signals automatically.');
-        
-        // Start continuous analysis
-        this.startContinuousAnalysis();
+        console.log('🤖 Trading Signal Bot Started!');
+        await this.sendTelegramMessage('🚀 *Trading Signal Bot Started!*\\n\\nMonitoring markets 24/7...');
+        this.startAnalysis();
     }
 
-    async startContinuousAnalysis() {
-        console.log('🔍 Starting continuous market analysis...');
-        
+    startAnalysis() {
         // Analyze every 2 minutes
-        cron.schedule('*/2 * * * *', async () => {
-            console.log(`🕒 ${new Date().toLocaleString()} - Analyzing markets...`);
-            await this.analyzeAllMarkets();
-        });
+        setInterval(() => {
+            this.analyzeAllMarkets();
+        }, 2 * 60 * 1000);
 
-        // Also run immediately
-        await this.analyzeAllMarkets();
+        // Run immediately
+        this.analyzeAllMarkets();
     }
 
     async analyzeAllMarkets() {
-        let signalsFound = 0;
+        console.log('🔍 Analyzing markets...');
 
         for (const pair of TRADING_PAIRS) {
             try {
                 const signal = await this.analyzePair(pair);
-                
-                if (signal && signal.confidence >= this.minConfidence) {
+                if (signal) {
                     await this.sendSignalToTelegram(signal);
-                    signalsFound++;
                 }
-                
+                await this.delay(1000);
             } catch (error) {
-                console.error(`Error analyzing ${pair}:`, error.message);
+                console.log(`Error with ${pair}:`, error.message);
             }
-            
-            await this.delay(500); // Rate limiting
-        }
-
-        if (signalsFound > 0) {
-            console.log(`✅ Sent ${signalsFound} signals to Telegram`);
         }
     }
 
     async analyzePair(pair) {
         try {
-            // Get price data from Binance API
             const response = await axios.get(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
             const data = response.data;
-            
-            const currentPrice = parseFloat(data.lastPrice);
-            const priceChange = parseFloat(data.priceChangePercent);
-            const high = parseFloat(data.highPrice);
-            const low = parseFloat(data.lowPrice);
+
+            const price = parseFloat(data.lastPrice);
+            const change = parseFloat(data.priceChangePercent);
             const volume = parseFloat(data.volume);
 
             // Simple signal logic
-            let direction, confidence, entry, tp, sl;
+            if (Math.abs(change) > 1.5 && volume > 10000) {
+                const direction = change > 0 ? 'LONG' : 'SHORT';
+                const confidence = 70 + Math.min(25, Math.abs(change));
 
-            if (priceChange > 2 && volume > 1000) {
-                // Bullish signal
-                direction = 'LONG';
-                confidence = 70 + Math.min(20, priceChange);
-                entry = currentPrice * 0.998;
-                sl = entry * 0.99;
-                tp = entry * 1.015;
-            } else if (priceChange < -2 && volume > 1000) {
-                // Bearish signal
-                direction = 'SHORT';
-                confidence = 70 + Math.min(20, Math.abs(priceChange));
-                entry = currentPrice * 1.002;
-                sl = entry * 1.01;
-                tp = entry * 0.985;
-            } else {
-                return null;
-            }
+                let entry, tp, sl;
+                if (direction === 'LONG') {
+                    entry = (price * 0.998).toFixed(2);
+                    sl = (price * 0.99).toFixed(2);
+                    tp = (price * 1.012).toFixed(2);
+                } else {
+                    entry = (price * 1.002).toFixed(2);
+                    sl = (price * 1.01).toFixed(2);
+                    tp = (price * 0.988).toFixed(2);
+                }
 
-            if (confidence >= this.minConfidence) {
                 return {
                     pair: pair.replace('USDT', '/USDT'),
                     direction: direction,
-                    entry: this.formatPrice(entry),
-                    tp: this.formatPrice(tp),
-                    sl: this.formatPrice(sl),
-                    currentPrice: this.formatPrice(currentPrice),
+                    entry: entry,
+                    tp: tp,
+                    sl: sl,
+                    currentPrice: price.toFixed(2),
                     confidence: Math.round(confidence),
-                    change: priceChange,
-                    volume: volume
+                    change: change
                 };
             }
-
         } catch (error) {
-            console.error(`Error fetching data for ${pair}:`, error.message);
+            console.log(`Failed to analyze ${pair}`);
         }
-        
         return null;
     }
 
-    formatPrice(price) {
-        if (price > 1000) return price.toFixed(2);
-        if (price > 1) return price.toFixed(3);
-        return price.toFixed(4);
-    }
-
     async sendSignalToTelegram(signal) {
-        const message = this.formatTelegramMessage(signal);
+        const message = this.formatSignalMessage(signal);
         return await this.sendTelegramMessage(message);
     }
 
     async sendTelegramMessage(message) {
+        if (!BOT_TOKEN || !CHAT_ID) {
+            console.log('Telegram not configured');
+            return false;
+        }
+
         try {
-            await bot.sendMessage(CHAT_ID, message, { parse_mode: 'Markdown' });
-            console.log('✅ Message sent to Telegram');
+            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+            const response = await axios.post(url, {
+                chat_id: CHAT_ID,
+                text: message,
+                parse_mode: 'Markdown'
+            });
+            console.log('✅ Signal sent to Telegram');
             return true;
         } catch (error) {
-            console.error('❌ Failed to send Telegram message:', error.message);
+            console.log('❌ Failed to send Telegram message');
             return false;
         }
     }
 
-    formatTelegramMessage(signal) {
-        const directionIcon = signal.direction === 'LONG' ? '🟢' : '🔴';
+    formatSignalMessage(signal) {
+        const icon = signal.direction === 'LONG' ? '🟢' : '🔴';
         
-        return `
-${directionIcon} *${signal.pair} ${signal.direction} SIGNAL* ${directionIcon}
+        return `${icon} *${signal.pair} ${signal.direction} SIGNAL* ${icon}
 
-🎯 *Entry:* $${signal.entry}
-✅ *Take Profit:* $${signal.tp}
-❌ *Stop Loss:* $${signal.sl}
-📊 *Current:* $${signal.currentPrice}
+🎯 Entry: $${signal.entry}
+✅ TP: $${signal.tp}  
+❌ SL: $${signal.sl}
+📊 Current: $${signal.currentPrice}
 
-⚡ *Confidence:* ${signal.confidence}%
-📈 *24h Change:* ${signal.change.toFixed(2)}%
-💰 *Volume:* ${this.formatNumber(signal.volume)}
+⚡ Confidence: ${signal.confidence}%
+📈 24h Change: ${signal.change.toFixed(2)}%
 
-💡 *Risk Management:*
-- Risk: 1% of capital
-- Stop loss mandatory
-- Take profit at 1:1.5 R:R
-
-*Time:* ${new Date().toLocaleString()}
-        `.trim();
-    }
-
-    formatNumber(num) {
-        if (num > 1000000) return (num / 1000000).toFixed(1) + 'M';
-        if (num > 1000) return (num / 1000).toFixed(1) + 'K';
-        return num.toFixed(0);
+⏰ ${new Date().toLocaleString()}`;
     }
 
     delay(ms) {
@@ -184,31 +138,21 @@ ${directionIcon} *${signal.pair} ${signal.direction} SIGNAL* ${directionIcon}
     }
 }
 
-// Health check endpoint
+// Health check
 app.get('/', (req, res) => {
-    res.json({ 
-        status: 'online', 
+    res.json({
+        status: 'online',
         service: 'Trading Signal Bot',
-        uptime: process.uptime(),
         timestamp: new Date().toISOString()
     });
 });
 
-app.get('/health', (req, res) => {
-    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
 // Start the bot
-const tradingBot = new TradingSignalBot();
+const bot = new TradingSignalBot();
 
-app.listen(PORT, async () => {
+app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    await tradingBot.initialize();
+    bot.initialize();
 });
 
-// Handle graceful shutdown
-process.on('SIGTERM', async () => {
-    console.log('🛑 Shutting down gracefully...');
-    await tradingBot.sendTelegramMessage('🔴 *Bot is shutting down for maintenance*');
-    process.exit(0);
-});
+module.exports = app;
