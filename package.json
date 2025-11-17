@@ -1,0 +1,19 @@
+{
+  "name": "trading-signal-bot",
+  "version": "1.0.0",
+  "description": "24/7 Trading Signal Bot with Telegram",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.64.0",
+    "ccxt": "^4.1.6",
+    "node-cron": "^3.0.2",
+    "express": "^4.18.2",
+    "technicalindicators": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
