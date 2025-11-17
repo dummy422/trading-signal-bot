@@ -1,4 +1,4 @@
-// TRADING BOT - TOP 100 COINS ANALYSIS
+// TRADING BOT - ADAPTIVE MARKET ANALYSIS
 const express = require('express');
 const axios = require('axios');
 
@@ -9,38 +9,28 @@ const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
-console.log('🔧 Trading Bot Starting with Top 100 Coins Analysis...');
+console.log('🔧 Trading Bot Starting with Adaptive Market Analysis...');
 
-// Top 100 cryptocurrencies by market cap
-const TOP_100_COINS = [
+// Top 50 cryptocurrencies (more manageable)
+const TOP_COINS = [
     'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
     'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'DOTUSDT', 'TRXUSDT',
-    'MATICUSDT', 'LINKUSDT', 'WBTCUSDT', 'LTCUSDT', 'BCHUSDT',
-    'ATOMUSDT', 'XLMUSDT', 'ETCUSDT', 'XMRUSDT', 'FILUSDT',
-    'APTUSDT', 'HBARUSDT', 'NEARUSDT', 'VETUSDT', 'ARBUSDT',
-    'ICPUSDT', 'MKRUSDT', 'OPUSDT', 'GRTUSDT', 'ALGOUSDT',
-    'EOSUSDT', 'AAVEUSDT', 'STXUSDT', 'QNTUSDT', 'RNDRUSDT',
-    'XTZUSDT', 'THETAUSDT', 'EGLDUSDT', 'FTMUSDT', 'AXSUSDT',
-    'SNXUSDT', 'KASUSDT', 'SANDUSDT', 'IMXUSDT', 'MANAUSDT',
-    'CRVUSDT', 'GALAUSDT', 'RUNEUSDT', 'LDOUSDT', 'APEUSDT',
-    'NEOUSDT', 'KAVAUSDT', 'CHZUSDT', 'COMPUSDT', 'DASHUSDT',
-    'ZECUSDT', 'ENJUSDT', 'BATUSDT', 'WAVESUSDT', 'HOTUSDT',
-    'ZILUSDT', 'IOSTUSDT', 'IOTAUSDT', 'CELRUSDT', 'ONEUSDT',
-    'ONTUSDT', 'RVNUSDT', 'SCUSDT', 'ANKRUSDT', 'STORJUSDT',
-    'SKLUSDT', 'OCEANUSDT', 'COTIUSDT', 'DGBUSDT', 'RSRUSDT',
-    'CTSIUSDT', 'STMXUSDT', 'KNCUSDT', 'LSKUSDT', 'ARDRUSDT',
-    'REEFUSDT', 'BANDUSDT', 'DENTUSDT', 'SXPUSDT', 'CVCUSDT',
-    'DATAUSDT', 'NKNUSDT', 'ALPHAUSDT', 'PERPUSDT', 'TRBUSDT',
-    'LITUSDT', 'KEYUSDT', 'DODOUSDT', 'TLMUSDT', 'BADGERUSDT',
-    'PONDUSDT', 'MLNUSDT', 'TWTUSDT', 'IDEXUSDT', 'RLCUSDT'
+    'MATICUSDT', 'LINKUSDT', 'LTCUSDT', 'BCHUSDT', 'ATOMUSDT',
+    'XLMUSDT', 'ETCUSDT', 'XMRUSDT', 'FILUSDT', 'APTUSDT',
+    'HBARUSDT', 'NEARUSDT', 'VETUSDT', 'ARBUSDT', 'ICPUSDT',
+    'MKRUSDT', 'OPUSDT', 'GRTUSDT', 'ALGOUSDT', 'EOSUSDT',
+    'AAVEUSDT', 'STXUSDT', 'QNTUSDT', 'RNDRUSDT', 'XTZUSDT',
+    'THETAUSDT', 'EGLDUSDT', 'FTMUSDT', 'AXSUSDT', 'SNXUSDT',
+    'SANDUSDT', 'MANAUSDT', 'CRVUSDT', 'GALAUSDT', 'RUNEUSDT',
+    'LDOUSDT', 'APEUSDT', 'COMPUSDT', 'DASHUSDT', 'ZECUSDT'
 ];
 
 class TradingSignalBot {
     constructor() {
-        this.minConfidence = 75;
-        this.analysisBatchSize = 10; // Analyze 10 coins at a time to avoid rate limits
-        this.currentBatch = 0;
-        console.log(`🤖 Trading Bot Started - Monitoring ${TOP_100_COINS.length} Top Coins`);
+        this.minConfidence = 65; // Lowered for more signals
+        this.marketConditions = 'analyzing';
+        this.lastAnalysisTime = null;
+        console.log(`🤖 Trading Bot Started - Monitoring ${TOP_COINS.length} Coins`);
     }
 
     async initialize() {
@@ -49,74 +39,66 @@ class TradingSignalBot {
         if (BOT_TOKEN && CHAT_ID) {
             await this.sendTelegramMessage(
                 `🚀 *Trading Signal Bot Started!*\n\n` +
-                `📊 *Monitoring:* ${TOP_100_COINS.length} Top Coins\n` +
-                `⏰ *Frequency:* Every 3 minutes\n` +
-                `🎯 *Min Confidence:* ${this.minConfidence}%`
+                `📊 *Monitoring:* ${TOP_COINS.length} Top Coins\n` +
+                `⏰ *Frequency:* Every 2 minutes\n` +
+                `🎯 *Min Confidence:* ${this.minConfidence}%\n` +
+                `🔍 *Market Mode:* Adaptive Analysis`
             );
-        } else {
-            console.log('⚠️ Telegram not configured.');
         }
         
         this.startAnalysis();
     }
 
     startAnalysis() {
-        // Analyze every 3 minutes (reduced frequency for 100 coins)
+        // Analyze every 2 minutes
         setInterval(() => {
-            this.analyzeInBatches();
-        }, 3 * 60 * 1000);
+            this.analyzeAllMarkets();
+        }, 2 * 60 * 1000);
 
         // Start immediately
         setTimeout(() => {
-            this.analyzeInBatches();
-        }, 5000);
+            this.analyzeAllMarkets();
+        }, 3000);
     }
 
-    async analyzeInBatches() {
-        const totalBatches = Math.ceil(TOP_100_COINS.length / this.analysisBatchSize);
-        this.currentBatch = (this.currentBatch % totalBatches);
-        
-        const startIdx = this.currentBatch * this.analysisBatchSize;
-        const endIdx = Math.min(startIdx + this.analysisBatchSize, TOP_100_COINS.length);
-        const currentBatch = TOP_100_COINS.slice(startIdx, endIdx);
+    async analyzeAllMarkets() {
+        console.log(`\n🔍 Analyzing ${TOP_COINS.length} coins - ${new Date().toLocaleString()}`);
+        this.lastAnalysisTime = new Date();
 
-        console.log(`\n🔍 Batch ${this.currentBatch + 1}/${totalBatches} - Analyzing ${currentBatch.length} coins...`);
+        let totalSignals = 0;
+        let marketSentiment = 0;
+        let coinsAnalyzed = 0;
 
-        let signalsFound = 0;
-        const batchSignals = [];
-
-        for (const pair of currentBatch) {
+        for (const pair of TOP_COINS) {
             try {
                 const signal = await this.analyzePair(pair);
                 if (signal) {
-                    console.log(`✅ Signal: ${pair} ${signal.direction} (${signal.confidence}%)`);
-                    batchSignals.push(signal);
-                    signalsFound++;
+                    console.log(`✅ SIGNAL: ${pair} ${signal.direction} (${signal.confidence}%)`);
+                    await this.sendSignalToTelegram(signal);
+                    totalSignals++;
+                    
+                    // Track market sentiment
+                    marketSentiment += signal.direction === 'LONG' ? 1 : -1;
                 }
-                await this.delay(1500); // 1.5 second delay between API calls
+                coinsAnalyzed++;
+                
+                // Small delay to avoid rate limits
+                await this.delay(800);
+                
             } catch (error) {
                 console.log(`❌ ${pair}:`, error.message);
             }
         }
 
-        // Send all signals from this batch
-        if (batchSignals.length > 0) {
-            console.log(`📤 Sending ${batchSignals.length} signals to Telegram...`);
-            for (const signal of batchSignals) {
-                await this.sendSignalToTelegram(signal);
-                await this.delay(1000); // 1 second between Telegram messages
-            }
-        }
-
-        console.log(`🎯 Batch ${this.currentBatch + 1} complete. Found ${signalsFound} signals.`);
+        // Determine market conditions
+        this.updateMarketConditions(marketSentiment, coinsAnalyzed);
         
-        // Move to next batch
-        this.currentBatch++;
+        console.log(`🎯 Analysis Complete: ${totalSignals} signals found`);
+        console.log(`📈 Market Sentiment: ${this.marketConditions}`);
         
-        // If we completed all batches, send summary
-        if (this.currentBatch >= totalBatches) {
-            this.currentBatch = 0;
-            console.log('🔄 Completed full cycle of 100 coins analysis');
+        // Send market summary if no signals but market is active
+        if (totalSignals === 0 && coinsAnalyzed > 0) {
+            await this.sendMarketSummary(marketSentiment, coinsAnalyzed);
         }
     }
 
@@ -135,60 +117,69 @@ class TradingSignalBot {
             const low = parseFloat(data.lowPrice);
             const quoteVolume = parseFloat(data.quoteVolume);
 
-            // Skip coins with very low volume
-            if (quoteVolume < 1000000) { // Less than $1M volume
+            // More inclusive volume filter
+            if (quoteVolume < 100000) { // Only $100k minimum volume
                 return null;
             }
 
             // Calculate metrics
             const volatility = ((high - low) / low * 100);
-            const volumeStrength = Math.min(3, quoteVolume / 5000000); // Normalize volume
+            const pricePosition = ((price - low) / (high - low)) * 100; // 0-100% range
 
-            // Advanced signal logic
+            // ADAPTIVE SIGNAL LOGIC - Works in all market conditions
+            
             let direction, confidence, entry, tp, sl;
+            let signalStrength = 0;
 
-            // Very strong signals (high volume + high momentum)
-            if (Math.abs(change) > 8 && quoteVolume > 50000000 && volatility > 4) {
+            // 1. MOMENTUM SIGNALS (Strong directional moves)
+            if (Math.abs(change) > 4) {
                 direction = change > 0 ? 'LONG' : 'SHORT';
-                confidence = 85 + Math.min(10, Math.abs(change) / 2);
+                signalStrength += Math.min(30, Math.abs(change) * 3);
             }
-            // Strong signals
-            else if (Math.abs(change) > 5 && quoteVolume > 20000000 && volatility > 2.5) {
-                direction = change > 0 ? 'LONG' : 'SHORT';
-                confidence = 80 + Math.min(15, Math.abs(change) / 2);
+            // 2. MEAN REVERSION (Oversold/Overbought)
+            else if ((change < -3 && pricePosition < 30) || (change > 3 && pricePosition > 70)) {
+                direction = change < -3 ? 'LONG' : 'SHORT'; // Reverse for mean reversion
+                signalStrength += 25;
             }
-            // Good signals
-            else if (Math.abs(change) > 3 && quoteVolume > 10000000 && volatility > 1.5) {
+            // 3. BREAKOUT (High volume + moderate move)
+            else if (Math.abs(change) > 1.5 && quoteVolume > 1000000) {
                 direction = change > 0 ? 'LONG' : 'SHORT';
-                confidence = 75 + Math.min(20, Math.abs(change) / 2);
+                signalStrength += 20;
             }
-            // Moderate signals
-            else if (Math.abs(change) > 2 && quoteVolume > 5000000) {
+            // 4. VOLATILITY PLAY (High volatility + any direction)
+            else if (volatility > 3 && Math.abs(change) > 1) {
                 direction = change > 0 ? 'LONG' : 'SHORT';
-                confidence = 70 + Math.min(25, Math.abs(change));
+                signalStrength += 15;
             }
             else {
                 return null;
             }
 
-            // Adjust confidence based on volume strength
-            confidence += (volumeStrength * 5);
+            // Base confidence
+            confidence = 60 + signalStrength;
 
-            // Cap confidence
-            confidence = Math.min(95, confidence);
+            // Volume boost
+            if (quoteVolume > 5000000) confidence += 10;
+            if (quoteVolume > 20000000) confidence += 5;
+
+            // Volatility adjustment
+            confidence += Math.min(10, volatility);
+
+            // Ensure minimum confidence
+            confidence = Math.max(this.minConfidence, Math.min(95, confidence));
 
             if (confidence >= this.minConfidence) {
-                // Calculate entry levels based on direction and volatility
-                const riskMultiplier = volatility * 0.1;
+                // Dynamic position sizing based on volatility
+                const riskFactor = Math.max(0.5, Math.min(2, volatility / 2));
                 
                 if (direction === 'LONG') {
-                    entry = (price * (1 - riskMultiplier * 0.3)).toFixed(4);
-                    sl = (price * (1 - riskMultiplier * 1.2)).toFixed(4);
-                    tp = (price * (1 + riskMultiplier * 1.8)).toFixed(4);
+                    entry = (price * (1 - 0.002 * riskFactor)).toFixed(6);
+                    sl = (price * (1 - 0.008 * riskFactor)).toFixed(6);
+                    tp = (price * (1 + 0.012 * riskFactor)).toFixed(6);
                 } else {
-                    entry = (price * (1 + riskMultiplier * 0.3)).toFixed(4);
-                    sl = (price * (1 + riskMultiplier * 1.2)).toFixed(4);
-                    tp = (price * (1 - riskMultiplier * 1.8)).toFixed(4);
+                    entry = (price * (1 + 0.002 * riskFactor)).toFixed(6);
+                    sl = (price * (1 + 0.008 * riskFactor)).toFixed(6);
+                    tp = (price * (1 - 0.012 * riskFactor)).toFixed(6);
                 }
 
                 return {
@@ -202,16 +193,86 @@ class TradingSignalBot {
                     change: change,
                     volume: this.formatVolume(quoteVolume),
                     volatility: volatility.toFixed(2),
-                    marketCapRank: TOP_100_COINS.indexOf(pair) + 1
+                    signalType: this.getSignalType(change, volatility, pricePosition),
+                    marketCondition: this.marketConditions
                 };
             }
 
         } catch (error) {
-            if (error.response?.status !== 404) { // Ignore "symbol not found" errors
+            // Ignore "symbol not found" errors, log others
+            if (error.response?.status !== 404) {
                 console.log(`❌ ${pair}:`, error.message);
             }
         }
         return null;
+    }
+
+    updateMarketConditions(sentiment, totalCoins) {
+        if (totalCoins === 0) return;
+        
+        const sentimentScore = sentiment / totalCoins;
+        
+        if (sentimentScore > 0.3) {
+            this.marketConditions = '🟢 STRONG BULLISH';
+        } else if (sentimentScore > 0.1) {
+            this.marketConditions = '🟡 MILD BULLISH';
+        } else if (sentimentScore < -0.3) {
+            this.marketConditions = '🔴 STRONG BEARISH';
+        } else if (sentimentScore < -0.1) {
+            this.marketConditions = '🟠 MILD BEARISH';
+        } else {
+            this.marketConditions = '⚪ NEUTRAL/SIDEWAYS';
+        }
+    }
+
+    getSignalType(change, volatility, pricePosition) {
+        if (Math.abs(change) > 5) return '🚀 STRONG MOMENTUM';
+        if (volatility > 4) return '🌊 HIGH VOLATILITY';
+        if (pricePosition < 20 || pricePosition > 80) return '🔄 MEAN REVERSION';
+        return '📈 TREND FOLLOWING';
+    }
+
+    async sendMarketSummary(sentiment, totalCoins) {
+        if (!BOT_TOKEN || !CHAT_ID) return;
+        
+        const sentimentScore = sentiment / totalCoins;
+        const summaryMessage = `
+📊 *Market Summary Report*
+
+🔍 *Coins Analyzed:* ${totalCoins}
+📈 *Market Sentiment:* ${this.marketConditions}
+⚖️ *Sentiment Score:* ${sentimentScore.toFixed(2)}
+
+💡 *Current Conditions:*
+- No high-confidence signals detected
+- Market is ${this.getMarketState(sentimentScore)}
+- Lower volatility or consolidation phase
+
+🎯 *Recommendation:*
+${this.getTradingRecommendation(sentimentScore)}
+
+⏰ *Next Analysis:* 2 minutes
+${this.lastAnalysisTime ? `*Last Scan:* ${this.lastAnalysisTime.toLocaleTimeString()}` : ''}
+        `.trim();
+
+        // Only send summary every 30 minutes to avoid spam
+        const now = new Date();
+        if (!this.lastSummaryTime || (now - this.lastSummaryTime) > 30 * 60 * 1000) {
+            await this.sendTelegramMessage(summaryMessage);
+            this.lastSummaryTime = now;
+        }
+    }
+
+    getMarketState(sentimentScore) {
+        if (Math.abs(sentimentScore) > 0.3) return 'trending strongly';
+        if (Math.abs(sentimentScore) > 0.1) return 'showing mild direction';
+        return 'consolidating or ranging';
+    }
+
+    getTradingRecommendation(sentimentScore) {
+        if (sentimentScore > 0.2) return 'Look for LONG opportunities on pullbacks';
+        if (sentimentScore < -0.2) return 'Look for SHORT opportunities on bounces';
+        return 'Wait for clearer direction or trade ranges';
     }
 
     async sendSignalToTelegram(signal) {
@@ -243,27 +304,26 @@ class TradingSignalBot {
 
     formatSignalMessage(signal) {
         const icon = signal.direction === 'LONG' ? '🟢' : '🔴';
-        const trend = signal.change > 0 ? '📈 Bullish' : '📉 Bearish';
         
         return `${icon} *${signal.pair} ${signal.direction}* ${icon}
 
-🏆 *Rank:* #${signal.marketCapRank}
-${trend} *(+${Math.abs(signal.change).toFixed(2)}%)*
+${signal.signalType}
+📊 *Market:* ${signal.marketCondition}
 
 🎯 *Entry:* $${signal.entry}
 ✅ *Take Profit:* $${signal.tp}  
 ❌ *Stop Loss:* $${signal.sl}
-📊 *Current:* $${signal.currentPrice}
+💰 *Current:* $${signal.currentPrice}
 
 ⚡ *Confidence:* ${signal.confidence}%
 📈 *24h Change:* ${signal.change.toFixed(2)}%
 🌊 *Volatility:* ${signal.volatility}%
-💰 *Volume:* $${signal.volume}
+💧 *Volume:* $${signal.volume}
 
 💡 *Risk Management:*
-- Position size: 1-2% of capital
-- Stop loss mandatory
-- Risk/Reward: ~1:1.5
+- Position: 1-2% of capital
+- Stop loss: Mandatory
+- R/R Ratio: ~1:1.5
 
 ⏰ *Time:* ${new Date().toLocaleString()}`;
     }
@@ -289,16 +349,17 @@ ${trend} *(+${Math.abs(signal.change).toFixed(2)}%)*
 
 // Health check endpoint
 app.get('/', (req, res) => {
+    const bot = require('./bot.js');
     res.json({
         status: 'online',
-        service: 'Top 100 Coins Trading Bot',
+        service: 'Adaptive Trading Bot',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
         config: {
-            totalCoins: TOP_100_COINS.length,
-            hasTelegram: !!(BOT_TOKEN && CHAT_ID),
-            minConfidence: 75,
-            analysisFrequency: '3 minutes'
+            totalCoins: TOP_COINS.length,
+            minConfidence: 65,
+            analysisFrequency: '2 minutes',
+            marketConditions: bot.marketConditions || 'analyzing'
         }
     });
 });
@@ -308,9 +369,9 @@ const bot = new TradingSignalBot();
 
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📊 Monitoring ${TOP_100_COINS.length} top cryptocurrencies`);
+    console.log(`📊 Monitoring ${TOP_COINS.length} cryptocurrencies`);
     console.log(`🌐 Health: https://trading-signal-bot-0xld.onrender.com`);
     bot.initialize();
 });
 
-module.exports = app;
+module.exports = bot;
