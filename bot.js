@@ -1,4 +1,4 @@
-// TRADING BOT - ADAPTIVE MARKET ANALYSIS
+// TRADING BOT - WITH TP % DISPLAY
 const express = require('express');
 const axios = require('axios');
 
@@ -9,9 +9,9 @@ const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
-console.log('🔧 Trading Bot Starting with Adaptive Market Analysis...');
+console.log('🔧 Trading Bot Starting with TP % Display...');
 
-// Top 50 cryptocurrencies (more manageable)
+// Top 50 cryptocurrencies
 const TOP_COINS = [
     'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
     'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'DOTUSDT', 'TRXUSDT',
@@ -27,10 +27,12 @@ const TOP_COINS = [
 
 class TradingSignalBot {
     constructor() {
-        this.minConfidence = 65; // Lowered for more signals
-        this.marketConditions = 'analyzing';
-        this.lastAnalysisTime = null;
-        console.log(`🤖 Trading Bot Started - Monitoring ${TOP_COINS.length} Coins`);
+        this.minConfidence = 65;
+        this.riskRewardRatios = {
+            'LONG': { tp: 1.5, sl: 1.0 },  // 1.5% TP, 1.0% SL
+            'SHORT': { tp: 1.5, sl: 1.0 }  // 1.5% TP, 1.0% SL
+        };
+        console.log(`🤖 Trading Bot Started - TP % Display Enabled`);
     }
 
     async initialize() {
@@ -41,8 +43,8 @@ class TradingSignalBot {
                 `🚀 *Trading Signal Bot Started!*\n\n` +
                 `📊 *Monitoring:* ${TOP_COINS.length} Top Coins\n` +
                 `⏰ *Frequency:* Every 2 minutes\n` +
-                `🎯 *Min Confidence:* ${this.minConfidence}%\n` +
-                `🔍 *Market Mode:* Adaptive Analysis`
+                `🎯 *TP/SL Ratio:* 1.5% / 1.0%\n` +
+                `📈 *Risk/Reward:* 1:1.5`
             );
         }
         
@@ -63,26 +65,18 @@ class TradingSignalBot {
 
     async analyzeAllMarkets() {
         console.log(`\n🔍 Analyzing ${TOP_COINS.length} coins - ${new Date().toLocaleString()}`);
-        this.lastAnalysisTime = new Date();
 
         let totalSignals = 0;
-        let marketSentiment = 0;
-        let coinsAnalyzed = 0;
 
         for (const pair of TOP_COINS) {
             try {
                 const signal = await this.analyzePair(pair);
                 if (signal) {
-                    console.log(`✅ SIGNAL: ${pair} ${signal.direction} (${signal.confidence}%)`);
+                    console.log(`✅ SIGNAL: ${pair} ${signal.direction} (${signal.confidence}%) - TP: ${signal.tpPercent}%`);
                     await this.sendSignalToTelegram(signal);
                     totalSignals++;
-                    
-                    // Track market sentiment
-                    marketSentiment += signal.direction === 'LONG' ? 1 : -1;
                 }
-                coinsAnalyzed++;
                 
-                // Small delay to avoid rate limits
                 await this.delay(800);
                 
             } catch (error) {
@@ -90,16 +84,7 @@ class TradingSignalBot {
             }
         }
 
-        // Determine market conditions
-        this.updateMarketConditions(marketSentiment, coinsAnalyzed);
-        
         console.log(`🎯 Analysis Complete: ${totalSignals} signals found`);
-        console.log(`📈 Market Sentiment: ${this.marketConditions}`);
-        
-        // Send market summary if no signals but market is active
-        if (totalSignals === 0 && coinsAnalyzed > 0) {
-            await this.sendMarketSummary(marketSentiment, coinsAnalyzed);
-        }
     }
 
     async analyzePair(pair) {
@@ -112,75 +97,70 @@ class TradingSignalBot {
 
             const price = parseFloat(data.lastPrice);
             const change = parseFloat(data.priceChangePercent);
-            const volume = parseFloat(data.volume);
             const high = parseFloat(data.highPrice);
             const low = parseFloat(data.lowPrice);
             const quoteVolume = parseFloat(data.quoteVolume);
 
-            // More inclusive volume filter
-            if (quoteVolume < 100000) { // Only $100k minimum volume
+            // Volume filter
+            if (quoteVolume < 100000) {
                 return null;
             }
 
-            // Calculate metrics
+            // Calculate volatility
             const volatility = ((high - low) / low * 100);
-            const pricePosition = ((price - low) / (high - low)) * 100; // 0-100% range
 
-            // ADAPTIVE SIGNAL LOGIC - Works in all market conditions
-            
-            let direction, confidence, entry, tp, sl;
-            let signalStrength = 0;
+            // SIGNAL DETECTION
+            let direction, confidence;
 
-            // 1. MOMENTUM SIGNALS (Strong directional moves)
+            // Strong momentum
             if (Math.abs(change) > 4) {
                 direction = change > 0 ? 'LONG' : 'SHORT';
-                signalStrength += Math.min(30, Math.abs(change) * 3);
+                confidence = 70 + Math.min(25, Math.abs(change));
             }
-            // 2. MEAN REVERSION (Oversold/Overbought)
-            else if ((change < -3 && pricePosition < 30) || (change > 3 && pricePosition > 70)) {
-                direction = change < -3 ? 'LONG' : 'SHORT'; // Reverse for mean reversion
-                signalStrength += 25;
+            // Mean reversion
+            else if ((change < -3) || (change > 3)) {
+                direction = change < 0 ? 'LONG' : 'SHORT'; // Reverse for mean reversion
+                confidence = 65 + Math.min(20, Math.abs(change));
             }
-            // 3. BREAKOUT (High volume + moderate move)
+            // Breakout with volume
             else if (Math.abs(change) > 1.5 && quoteVolume > 1000000) {
                 direction = change > 0 ? 'LONG' : 'SHORT';
-                signalStrength += 20;
-            }
-            // 4. VOLATILITY PLAY (High volatility + any direction)
-            else if (volatility > 3 && Math.abs(change) > 1) {
-                direction = change > 0 ? 'LONG' : 'SHORT';
-                signalStrength += 15;
+                confidence = 65;
             }
             else {
                 return null;
             }
 
-            // Base confidence
-            confidence = 60 + signalStrength;
-
             // Volume boost
             if (quoteVolume > 5000000) confidence += 10;
             if (quoteVolume > 20000000) confidence += 5;
 
-            // Volatility adjustment
-            confidence += Math.min(10, volatility);
-
-            // Ensure minimum confidence
             confidence = Math.max(this.minConfidence, Math.min(95, confidence));
 
             if (confidence >= this.minConfidence) {
-                // Dynamic position sizing based on volatility
-                const riskFactor = Math.max(0.5, Math.min(2, volatility / 2));
+                const ratios = this.riskRewardRatios[direction];
                 
+                let entry, tp, sl, tpPercent, slPercent;
+
                 if (direction === 'LONG') {
-                    entry = (price * (1 - 0.002 * riskFactor)).toFixed(6);
-                    sl = (price * (1 - 0.008 * riskFactor)).toFixed(6);
-                    tp = (price * (1 + 0.012 * riskFactor)).toFixed(6);
+                    // LONG: Buy dip, TP above, SL below
+                    entry = (price * 0.995).toFixed(6); // 0.5% below current
+                    tp = (parseFloat(entry) * (1 + ratios.tp/100)).toFixed(6);
+                    sl = (parseFloat(entry) * (1 - ratios.sl/100)).toFixed(6);
+                    tpPercent = ratios.tp;
+                    slPercent = ratios.sl;
                 } else {
-                    entry = (price * (1 + 0.002 * riskFactor)).toFixed(6);
-                    sl = (price * (1 + 0.008 * riskFactor)).toFixed(6);
-                    tp = (price * (1 - 0.012 * riskFactor)).toFixed(6);
+                    // SHORT: Sell bounce, TP below, SL above
+                    entry = (price * 1.005).toFixed(6); // 0.5% above current
+                    tp = (parseFloat(entry) * (1 - ratios.tp/100)).toFixed(6);
+                    sl = (parseFloat(entry) * (1 + ratios.sl/100)).toFixed(6);
+                    tpPercent = ratios.tp;
+                    slPercent = ratios.sl;
                 }
+
+                // Calculate actual percentages from current price
+                const currentToTP = Math.abs((parseFloat(tp) - price) / price * 100);
+                const currentToSL = Math.abs((parseFloat(sl) - price) / price * 100);
 
                 return {
                     pair: pair.replace('USDT', '/USDT'),
@@ -189,90 +169,24 @@ class TradingSignalBot {
                     tp: this.formatPrice(parseFloat(tp)),
                     sl: this.formatPrice(parseFloat(sl)),
                     currentPrice: this.formatPrice(price),
+                    tpPercent: tpPercent,
+                    slPercent: slPercent,
+                    currentToTP: currentToTP.toFixed(1),
+                    currentToSL: currentToSL.toFixed(1),
                     confidence: Math.round(confidence),
                     change: change,
                     volume: this.formatVolume(quoteVolume),
-                    volatility: volatility.toFixed(2),
-                    signalType: this.getSignalType(change, volatility, pricePosition),
-                    marketCondition: this.marketConditions
+                    volatility: volatility.toFixed(1),
+                    riskReward: (tpPercent / slPercent).toFixed(1)
                 };
             }
 
         } catch (error) {
-            // Ignore "symbol not found" errors, log others
             if (error.response?.status !== 404) {
                 console.log(`❌ ${pair}:`, error.message);
             }
         }
         return null;
-    }
-
-    updateMarketConditions(sentiment, totalCoins) {
-        if (totalCoins === 0) return;
-        
-        const sentimentScore = sentiment / totalCoins;
-        
-        if (sentimentScore > 0.3) {
-            this.marketConditions = '🟢 STRONG BULLISH';
-        } else if (sentimentScore > 0.1) {
-            this.marketConditions = '🟡 MILD BULLISH';
-        } else if (sentimentScore < -0.3) {
-            this.marketConditions = '🔴 STRONG BEARISH';
-        } else if (sentimentScore < -0.1) {
-            this.marketConditions = '🟠 MILD BEARISH';
-        } else {
-            this.marketConditions = '⚪ NEUTRAL/SIDEWAYS';
-        }
-    }
-
-    getSignalType(change, volatility, pricePosition) {
-        if (Math.abs(change) > 5) return '🚀 STRONG MOMENTUM';
-        if (volatility > 4) return '🌊 HIGH VOLATILITY';
-        if (pricePosition < 20 || pricePosition > 80) return '🔄 MEAN REVERSION';
-        return '📈 TREND FOLLOWING';
-    }
-
-    async sendMarketSummary(sentiment, totalCoins) {
-        if (!BOT_TOKEN || !CHAT_ID) return;
-        
-        const sentimentScore = sentiment / totalCoins;
-        const summaryMessage = `
-📊 *Market Summary Report*
-
-🔍 *Coins Analyzed:* ${totalCoins}
-📈 *Market Sentiment:* ${this.marketConditions}
-⚖️ *Sentiment Score:* ${sentimentScore.toFixed(2)}
-
-💡 *Current Conditions:*
-- No high-confidence signals detected
-- Market is ${this.getMarketState(sentimentScore)}
-- Lower volatility or consolidation phase
-
-🎯 *Recommendation:*
-${this.getTradingRecommendation(sentimentScore)}
-
-⏰ *Next Analysis:* 2 minutes
-${this.lastAnalysisTime ? `*Last Scan:* ${this.lastAnalysisTime.toLocaleTimeString()}` : ''}
-        `.trim();
-
-        // Only send summary every 30 minutes to avoid spam
-        const now = new Date();
-        if (!this.lastSummaryTime || (now - this.lastSummaryTime) > 30 * 60 * 1000) {
-            await this.sendTelegramMessage(summaryMessage);
-            this.lastSummaryTime = now;
-        }
-    }
-
-    getMarketState(sentimentScore) {
-        if (Math.abs(sentimentScore) > 0.3) return 'trending strongly';
-        if (Math.abs(sentimentScore) > 0.1) return 'showing mild direction';
-        return 'consolidating or ranging';
-    }
-
-    getTradingRecommendation(sentimentScore) {
-        if (sentimentScore > 0.2) return 'Look for LONG opportunities on pullbacks';
-        if (sentimentScore < -0.2) return 'Look for SHORT opportunities on bounces';
-        return 'Wait for clearer direction or trade ranges';
     }
 
     async sendSignalToTelegram(signal) {
@@ -304,28 +218,32 @@ ${this.lastAnalysisTime ? `*Last Scan:* ${this.lastAnalysisTime.toLocaleTimeStri
 
     formatSignalMessage(signal) {
         const icon = signal.direction === 'LONG' ? '🟢' : '🔴';
+        const directionText = signal.direction === 'LONG' ? 'BUY' : 'SELL';
         
-        return `${icon} *${signal.pair} ${signal.direction}* ${icon}
+        return `${icon} *${signal.pair} ${directionText}* ${icon}
 
-${signal.signalType}
-📊 *Market:* ${signal.marketCondition}
+🎯 *ENTRY:* $${signal.entry}
+✅ *TAKE PROFIT:* $${signal.tp} *(+${signal.tpPercent}%)*
+❌ *STOP LOSS:* $${signal.sl} *(-${signal.slPercent}%)*
+💰 *CURRENT:* $${signal.currentPrice}
 
-🎯 *Entry:* $${signal.entry}
-✅ *Take Profit:* $${signal.tp}  
-❌ *Stop Loss:* $${signal.sl}
-💰 *Current:* $${signal.currentPrice}
+📊 *FROM CURRENT PRICE:*
+📈 TP: +${signal.currentToTP}%
+📉 SL: -${signal.currentToSL}%
 
-⚡ *Confidence:* ${signal.confidence}%
-📈 *24h Change:* ${signal.change.toFixed(2)}%
-🌊 *Volatility:* ${signal.volatility}%
-💧 *Volume:* $${signal.volume}
+⚡ *CONFIDENCE:* ${signal.confidence}%
+📈 *24h CHANGE:* ${signal.change.toFixed(2)}%
+🌊 *VOLATILITY:* ${signal.volatility}%
+💰 *VOLUME:* $${signal.volume}
+⚖️ *R/R RATIO:* 1:${signal.riskReward}
 
-💡 *Risk Management:*
-- Position: 1-2% of capital
-- Stop loss: Mandatory
-- R/R Ratio: ~1:1.5
+💡 *RISK MANAGEMENT:*
+- Position Size: 1-2% of capital
+- Stop Loss: MANDATORY
+- Risk/Reward: 1:${signal.riskReward}
+- TP Target: ${signal.tpPercent}% gain
 
-⏰ *Time:* ${new Date().toLocaleString()}`;
+⏰ *TIME:* ${new Date().toLocaleString()}`;
     }
 
     formatPrice(price) {
@@ -349,17 +267,16 @@ ${signal.signalType}
 
 // Health check endpoint
 app.get('/', (req, res) => {
-    const bot = require('./bot.js');
     res.json({
         status: 'online',
-        service: 'Adaptive Trading Bot',
+        service: 'Trading Bot with TP %',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
         config: {
             totalCoins: TOP_COINS.length,
-            minConfidence: 65,
-            analysisFrequency: '2 minutes',
-            marketConditions: bot.marketConditions || 'analyzing'
+            tpPercent: 1.5,
+            slPercent: 1.0,
+            riskReward: '1:1.5'
         }
     });
 });
@@ -369,8 +286,8 @@ const bot = new TradingSignalBot();
 
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📊 Monitoring ${TOP_COINS.length} cryptocurrencies`);
-    console.log(`🌐 Health: https://trading-signal-bot-0xld.onrender.com`);
+    console.log(`📊 Monitoring ${TOP_COINS.length} coins with TP % display`);
+    console.log(`🎯 TP: 1.5% | SL: 1.0% | R/R: 1:1.5`);
     bot.initialize();
 });
 
