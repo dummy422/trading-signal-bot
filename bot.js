@@ -1,4 +1,5 @@
-const TelegramBot = require('node-telegram-bot-api');
+
+// TRADING BOT v2 - FIXED DEPENDENCIESconst TelegramBot = require('node-telegram-bot-api');
 const axios = require('axios');
 const cron = require('node-cron');
 const express = require('express');
