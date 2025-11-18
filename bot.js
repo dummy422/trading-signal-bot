@@ -1,4 +1,4 @@
-// TRADING BOT - WITH TP % DISPLAY
+// SCALP SPOT CALL BOT - QUICK TRADES
 const express = require('express');
 const axios = require('axios');
 
@@ -9,188 +9,238 @@ const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = process.env.CHAT_ID;
 
-console.log('🔧 Trading Bot Starting with TP % Display...');
+console.log('🔥 Scalp Spot Call Bot Starting...');
 
-// Top 50 cryptocurrencies
-const TOP_COINS = [
+// High-volume pairs for scalping
+const SCALP_PAIRS = [
     'BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'SOLUSDT', 'XRPUSDT',
-    'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'DOTUSDT', 'TRXUSDT',
-    'MATICUSDT', 'LINKUSDT', 'LTCUSDT', 'BCHUSDT', 'ATOMUSDT',
-    'XLMUSDT', 'ETCUSDT', 'XMRUSDT', 'FILUSDT', 'APTUSDT',
-    'HBARUSDT', 'NEARUSDT', 'VETUSDT', 'ARBUSDT', 'ICPUSDT',
-    'MKRUSDT', 'OPUSDT', 'GRTUSDT', 'ALGOUSDT', 'EOSUSDT',
-    'AAVEUSDT', 'STXUSDT', 'QNTUSDT', 'RNDRUSDT', 'XTZUSDT',
-    'THETAUSDT', 'EGLDUSDT', 'FTMUSDT', 'AXSUSDT', 'SNXUSDT',
-    'SANDUSDT', 'MANAUSDT', 'CRVUSDT', 'GALAUSDT', 'RUNEUSDT',
-    'LDOUSDT', 'APEUSDT', 'COMPUSDT', 'DASHUSDT', 'ZECUSDT'
+    'ADAUSDT', 'AVAXUSDT', 'DOGEUSDT', 'DOTUSDT', 'MATICUSDT',
+    'LTCUSDT', 'LINKUSDT', 'ATOMUSDT', 'XLMUSDT', 'ETCUSDT',
+    'TRXUSDT', 'FILUSDT', 'APTUSDT', 'NEARUSDT', 'ARBUSDT'
 ];
 
-class TradingSignalBot {
+class ScalpSpotCallBot {
     constructor() {
-        this.minConfidence = 65;
-        this.riskRewardRatios = {
-            'LONG': { tp: 1.5, sl: 1.0 },  // 1.5% TP, 1.0% SL
-            'SHORT': { tp: 1.5, sl: 1.0 }  // 1.5% TP, 1.0% SL
+        this.minConfidence = 70;
+        this.scalpSettings = {
+            tpPercent: 0.3,    // 0.3% take profit
+            slPercent: 0.2,    // 0.2% stop loss
+            holdTime: '1-3min', // Quick scalp duration
+            riskReward: '1:1.5'
         };
-        console.log(`🤖 Trading Bot Started - TP % Display Enabled`);
+        console.log(`🔥 Scalp Bot Ready - ${SCALP_PAIRS.length} Pairs`);
     }
 
     async initialize() {
-        console.log('🤖 Trading Signal Bot Started!');
+        console.log('🔥 Scalp Spot Call Bot Started!');
         
         if (BOT_TOKEN && CHAT_ID) {
             await this.sendTelegramMessage(
-                `🚀 *Trading Signal Bot Started!*\n\n` +
-                `📊 *Monitoring:* ${TOP_COINS.length} Top Coins\n` +
-                `⏰ *Frequency:* Every 2 minutes\n` +
-                `🎯 *TP/SL Ratio:* 1.5% / 1.0%\n` +
-                `📈 *Risk/Reward:* 1:1.5`
+                `🔥 *SCALP SPOT CALL BOT ACTIVATED*\n\n` +
+                `🎯 *Strategy:* Quick Scalp Trades\n` +
+                `⏰ *Hold Time:* 1-3 minutes\n` +
+                `💰 *TP/SL:* ${this.scalpSettings.tpPercent}% / ${this.scalpSettings.slPercent}%\n` +
+                `⚡ *Frequency:* Every 60 seconds\n` +
+                `📊 *Pairs:* ${SCALP_PAIRS.length} High-Volume`
             );
         }
         
-        this.startAnalysis();
+        this.startScalpAnalysis();
     }
 
-    startAnalysis() {
-        // Analyze every 2 minutes
+    startScalpAnalysis() {
+        // Analyze every 60 seconds for scalp opportunities
         setInterval(() => {
-            this.analyzeAllMarkets();
-        }, 2 * 60 * 1000);
+            this.analyzeScalpOpportunities();
+        }, 60 * 1000);
 
         // Start immediately
         setTimeout(() => {
-            this.analyzeAllMarkets();
+            this.analyzeScalpOpportunities();
         }, 3000);
     }
 
-    async analyzeAllMarkets() {
-        console.log(`\n🔍 Analyzing ${TOP_COINS.length} coins - ${new Date().toLocaleString()}`);
+    async analyzeScalpOpportunities() {
+        console.log(`\n🔍 Scanning ${SCALP_PAIRS.length} pairs for scalp setups...`);
 
-        let totalSignals = 0;
+        let scalpSignals = [];
 
-        for (const pair of TOP_COINS) {
+        for (const pair of SCALP_PAIRS) {
             try {
-                const signal = await this.analyzePair(pair);
-                if (signal) {
-                    console.log(`✅ SIGNAL: ${pair} ${signal.direction} (${signal.confidence}%) - TP: ${signal.tpPercent}%`);
-                    await this.sendSignalToTelegram(signal);
-                    totalSignals++;
+                const scalpSignal = await this.analyzeScalpPair(pair);
+                if (scalpSignal) {
+                    console.log(`🎯 SCALP: ${pair} ${scalpSignal.direction} (${scalpSignal.confidence}%)`);
+                    scalpSignals.push(scalpSignal);
                 }
                 
-                await this.delay(800);
+                await this.delay(500); // Fast scanning
                 
             } catch (error) {
                 console.log(`❌ ${pair}:`, error.message);
             }
         }
 
-        console.log(`🎯 Analysis Complete: ${totalSignals} signals found`);
+        // Sort by confidence and send top 3 scalp signals
+        scalpSignals.sort((a, b) => b.confidence - a.confidence);
+        const topSignals = scalpSignals.slice(0, 3);
+
+        for (const signal of topSignals) {
+            await this.sendScalpCall(signal);
+            await this.delay(1000);
+        }
+
+        if (topSignals.length > 0) {
+            console.log(`🔥 Sent ${topSignals.length} scalp calls`);
+        }
     }
 
-    async analyzePair(pair) {
+    async analyzeScalpPair(pair) {
         try {
-            const response = await axios.get(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`, {
-                timeout: 10000
-            });
-            
-            const data = response.data;
+            // Get recent price data for scalp analysis
+            const [tickerResponse, klinesResponse] = await Promise.all([
+                axios.get(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`),
+                axios.get(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=1m&limit=10`)
+            ]);
 
-            const price = parseFloat(data.lastPrice);
-            const change = parseFloat(data.priceChangePercent);
-            const high = parseFloat(data.highPrice);
-            const low = parseFloat(data.lowPrice);
-            const quoteVolume = parseFloat(data.quoteVolume);
+            const tickerData = tickerResponse.data;
+            const klines = klinesResponse.data;
 
-            // Volume filter
-            if (quoteVolume < 100000) {
-                return null;
+            const currentPrice = parseFloat(tickerData.lastPrice);
+            const change = parseFloat(tickerData.priceChangePercent);
+            const volume = parseFloat(tickerData.volume);
+            const high = parseFloat(tickerData.highPrice);
+            const low = parseFloat(tickerData.lowPrice);
+
+            // Skip low volume pairs for scalping
+            if (volume < 50000) return null;
+
+            // Calculate short-term metrics
+            const recentPrices = klines.map(k => parseFloat(k[4])); // closing prices
+            const recentHigh = Math.max(...recentPrices);
+            const recentLow = Math.min(...recentPrices);
+            const currentPosition = ((currentPrice - recentLow) / (recentHigh - recentLow)) * 100;
+
+            // SCALP SIGNAL DETECTION
+            let direction, confidence, signalType;
+
+            // 1. MOMENTUM BREAKOUT (Strongest scalp signal)
+            if (this.isMomentumBreakout(klines, currentPrice)) {
+                direction = currentPrice > recentPrices[recentPrices.length-2] ? 'LONG' : 'SHORT';
+                confidence = 85;
+                signalType = '🚀 MOMENTUM BREAKOUT';
             }
-
-            // Calculate volatility
-            const volatility = ((high - low) / low * 100);
-
-            // SIGNAL DETECTION
-            let direction, confidence;
-
-            // Strong momentum
-            if (Math.abs(change) > 4) {
-                direction = change > 0 ? 'LONG' : 'SHORT';
-                confidence = 70 + Math.min(25, Math.abs(change));
+            // 2. SUPPORT/RESISTANCE BOUNCE
+            else if (this.isSupportResistanceBounce(currentPosition, currentPrice, recentHigh, recentLow)) {
+                direction = currentPosition < 20 ? 'LONG' : 'SHORT';
+                confidence = 80;
+                signalType = '📊 S/R BOUNCE';
             }
-            // Mean reversion
-            else if ((change < -3) || (change > 3)) {
-                direction = change < 0 ? 'LONG' : 'SHORT'; // Reverse for mean reversion
-                confidence = 65 + Math.min(20, Math.abs(change));
+            // 3. VOLUME SPIKE
+            else if (this.isVolumeSpike(klines, volume)) {
+                const lastClose = recentPrices[recentPrices.length-2];
+                direction = currentPrice > lastClose ? 'LONG' : 'SHORT';
+                confidence = 75;
+                signalType = '💧 VOLUME SPIKE';
             }
-            // Breakout with volume
-            else if (Math.abs(change) > 1.5 && quoteVolume > 1000000) {
-                direction = change > 0 ? 'LONG' : 'SHORT';
-                confidence = 65;
+            // 4. TREND PULLBACK
+            else if (this.isTrendPullback(recentPrices, currentPosition)) {
+                const trend = this.getShortTermTrend(recentPrices);
+                direction = trend > 0 ? 'LONG' : 'SHORT';
+                confidence = 70;
+                signalType = '🔄 TREND PULLBACK';
             }
             else {
                 return null;
             }
 
-            // Volume boost
-            if (quoteVolume > 5000000) confidence += 10;
-            if (quoteVolume > 20000000) confidence += 5;
+            // Calculate scalp entries
+            let entry, tp, sl;
 
-            confidence = Math.max(this.minConfidence, Math.min(95, confidence));
-
-            if (confidence >= this.minConfidence) {
-                const ratios = this.riskRewardRatios[direction];
-                
-                let entry, tp, sl, tpPercent, slPercent;
-
-                if (direction === 'LONG') {
-                    // LONG: Buy dip, TP above, SL below
-                    entry = (price * 0.995).toFixed(6); // 0.5% below current
-                    tp = (parseFloat(entry) * (1 + ratios.tp/100)).toFixed(6);
-                    sl = (parseFloat(entry) * (1 - ratios.sl/100)).toFixed(6);
-                    tpPercent = ratios.tp;
-                    slPercent = ratios.sl;
-                } else {
-                    // SHORT: Sell bounce, TP below, SL above
-                    entry = (price * 1.005).toFixed(6); // 0.5% above current
-                    tp = (parseFloat(entry) * (1 - ratios.tp/100)).toFixed(6);
-                    sl = (parseFloat(entry) * (1 + ratios.sl/100)).toFixed(6);
-                    tpPercent = ratios.tp;
-                    slPercent = ratios.sl;
-                }
-
-                // Calculate actual percentages from current price
-                const currentToTP = Math.abs((parseFloat(tp) - price) / price * 100);
-                const currentToSL = Math.abs((parseFloat(sl) - price) / price * 100);
-
-                return {
-                    pair: pair.replace('USDT', '/USDT'),
-                    direction: direction,
-                    entry: this.formatPrice(parseFloat(entry)),
-                    tp: this.formatPrice(parseFloat(tp)),
-                    sl: this.formatPrice(parseFloat(sl)),
-                    currentPrice: this.formatPrice(price),
-                    tpPercent: tpPercent,
-                    slPercent: slPercent,
-                    currentToTP: currentToTP.toFixed(1),
-                    currentToSL: currentToSL.toFixed(1),
-                    confidence: Math.round(confidence),
-                    change: change,
-                    volume: this.formatVolume(quoteVolume),
-                    volatility: volatility.toFixed(1),
-                    riskReward: (tpPercent / slPercent).toFixed(1)
-                };
+            if (direction === 'LONG') {
+                entry = (currentPrice * 0.9995).toFixed(6); // Slightly below current
+                tp = (parseFloat(entry) * (1 + this.scalpSettings.tpPercent/100)).toFixed(6);
+                sl = (parseFloat(entry) * (1 - this.scalpSettings.slPercent/100)).toFixed(6);
+            } else {
+                entry = (currentPrice * 1.0005).toFixed(6); // Slightly above current
+                tp = (parseFloat(entry) * (1 - this.scalpSettings.tpPercent/100)).toFixed(6);
+                sl = (parseFloat(entry) * (1 + this.scalpSettings.slPercent/100)).toFixed(6);
             }
+
+            return {
+                pair: pair.replace('USDT', '/USDT'),
+                direction: direction,
+                entry: this.formatPrice(parseFloat(entry)),
+                tp: this.formatPrice(parseFloat(tp)),
+                sl: this.formatPrice(parseFloat(sl)),
+                currentPrice: this.formatPrice(currentPrice),
+                confidence: confidence,
+                signalType: signalType,
+                holdTime: this.scalpSettings.holdTime,
+                tpPercent: this.scalpSettings.tpPercent,
+                slPercent: this.scalpSettings.slPercent,
+                riskReward: this.scalpSettings.riskReward,
+                volume: this.formatVolume(volume),
+                change: change
+            };
 
         } catch (error) {
-            if (error.response?.status !== 404) {
-                console.log(`❌ ${pair}:`, error.message);
-            }
+            console.log(`❌ Scalp analysis failed for ${pair}:`, error.message);
+            return null;
         }
-        return null;
     }
 
-    async sendSignalToTelegram(signal) {
-        const message = this.formatSignalMessage(signal);
+    isMomentumBreakout(klines, currentPrice) {
+        // Check for strong momentum in recent candles
+        const recentCloses = klines.map(k => parseFloat(k[4]));
+        const recentOpens = klines.map(k => parseFloat(k[1]));
+        
+        // Strong bullish momentum
+        const bullishMomentum = currentPrice > recentCloses[recentCloses.length-2] * 1.002 && 
+                               recentCloses[recentCloses.length-2] > recentCloses[recentCloses.length-3] * 1.001;
+        
+        // Strong bearish momentum
+        const bearishMomentum = currentPrice < recentCloses[recentCloses.length-2] * 0.998 && 
+                               recentCloses[recentCloses.length-2] < recentCloses[recentCloses.length-3] * 0.999;
+
+        return bullishMomentum || bearishMomentum;
+    }
+
+    isSupportResistanceBounce(position, currentPrice, high, low) {
+        // Price at key support/resistance levels
+        const atSupport = position < 15 && currentPrice > low * 1.001;
+        const atResistance = position > 85 && currentPrice < high * 0.999;
+        
+        return atSupport || atResistance;
+    }
+
+    isVolumeSpike(klines, currentVolume) {
+        // Check if current volume is significantly higher than recent average
+        const recentVolumes = klines.map(k => parseFloat(k[5]));
+        const avgVolume = recentVolumes.reduce((a, b) => a + b, 0) / recentVolumes.length;
+        
+        return currentVolume > avgVolume * 2; // 2x volume spike
+    }
+
+    isTrendPullback(prices, position) {
+        const trend = this.getShortTermTrend(prices);
+        
+        // Pullback in uptrend
+        if (trend > 0 && position < 40) return true;
+        // Pullback in downtrend
+        if (trend < 0 && position > 60) return true;
+        
+        return false;
+    }
+
+    getShortTermTrend(prices) {
+        const recentAvg = prices.slice(-5).reduce((a, b) => a + b, 0) / 5;
+        const earlierAvg = prices.slice(0, 5).reduce((a, b) => a + b, 0) / 5;
+        
+        return recentAvg > earlierAvg ? 1 : -1;
+    }
+
+    async sendScalpCall(signal) {
+        const message = this.formatScalpCall(signal);
         return await this.sendTelegramMessage(message);
     }
 
@@ -208,7 +258,7 @@ class TradingSignalBot {
                 parse_mode: 'Markdown'
             });
             
-            console.log('✅ Telegram message sent!');
+            console.log('✅ Scalp call sent!');
             return true;
         } catch (error) {
             console.log('❌ Telegram error:', error.response?.data?.description || error.message);
@@ -216,34 +266,36 @@ class TradingSignalBot {
         }
     }
 
-    formatSignalMessage(signal) {
+    formatScalpCall(signal) {
         const icon = signal.direction === 'LONG' ? '🟢' : '🔴';
-        const directionText = signal.direction === 'LONG' ? 'BUY' : 'SELL';
+        const action = signal.direction === 'LONG' ? 'BUY' : 'SELL';
         
-        return `${icon} *${signal.pair} ${directionText}* ${icon}
+        return `🔥 *SCALP SPOT CALL* 🔥
+
+${icon} *${signal.pair} ${action}* ${icon}
+${signal.signalType}
 
 🎯 *ENTRY:* $${signal.entry}
-✅ *TAKE PROFIT:* $${signal.tp} *(+${signal.tpPercent}%)*
-❌ *STOP LOSS:* $${signal.sl} *(-${signal.slPercent}%)*
+✅ *TP:* $${signal.tp} *(+${signal.tpPercent}%)*
+❌ *SL:* $${signal.sl} *(-${signal.slPercent}%)*
 💰 *CURRENT:* $${signal.currentPrice}
 
-📊 *FROM CURRENT PRICE:*
-📈 TP: +${signal.currentToTP}%
-📉 SL: -${signal.currentToSL}%
+⚡ *HOLD TIME:* ${signal.holdTime}
+🎯 *CONFIDENCE:* ${signal.confidence}%
+⚖️ *R/R:* ${signal.riskReward}
 
-⚡ *CONFIDENCE:* ${signal.confidence}%
-📈 *24h CHANGE:* ${signal.change.toFixed(2)}%
-🌊 *VOLATILITY:* ${signal.volatility}%
-💰 *VOLUME:* $${signal.volume}
-⚖️ *R/R RATIO:* 1:${signal.riskReward}
+📊 *STATS:*
+📈 24h Change: ${signal.change.toFixed(2)}%
+💧 Volume: $${signal.volume}
 
-💡 *RISK MANAGEMENT:*
-- Position Size: 1-2% of capital
-- Stop Loss: MANDATORY
-- Risk/Reward: 1:${signal.riskReward}
-- TP Target: ${signal.tpPercent}% gain
+💡 *SCALP STRATEGY:*
+• Quick entry/exit
+• Tight stops
+• Take profit quickly
+• Don't greed
 
-⏰ *TIME:* ${new Date().toLocaleString()}`;
+⏰ *TIME:* ${new Date().toLocaleTimeString()}
+🕒 *DURATION:* ${signal.holdTime}`;
     }
 
     formatPrice(price) {
@@ -269,25 +321,26 @@ class TradingSignalBot {
 app.get('/', (req, res) => {
     res.json({
         status: 'online',
-        service: 'Trading Bot with TP %',
+        service: 'Scalp Spot Call Bot',
         uptime: process.uptime(),
         timestamp: new Date().toISOString(),
         config: {
-            totalCoins: TOP_COINS.length,
-            tpPercent: 1.5,
-            slPercent: 1.0,
-            riskReward: '1:1.5'
+            pairs: SCALP_PAIRS.length,
+            scanFrequency: '60 seconds',
+            tpPercent: 0.3,
+            slPercent: 0.2,
+            holdTime: '1-3 minutes'
         }
     });
 });
 
 // Start the bot
-const bot = new TradingSignalBot();
+const bot = new ScalpSpotCallBot();
 
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📊 Monitoring ${TOP_COINS.length} coins with TP % display`);
-    console.log(`🎯 TP: 1.5% | SL: 1.0% | R/R: 1:1.5`);
+    console.log(`🔥 Scalp Bot running on port ${PORT}`);
+    console.log(`⏰ Scanning every 60 seconds`);
+    console.log(`🎯 TP: 0.3% | SL: 0.2% | Hold: 1-3min`);
     bot.initialize();
 });
 
